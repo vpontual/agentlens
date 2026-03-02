@@ -6,6 +6,21 @@ on:
   pull_request:
 
 jobs:
+  up-to-date:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check PR branch contains latest main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::error::This branch is not up to date with main. Merge main into your branch and push again."
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     steps:
