@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.claude/
+.git/
+CLAUDE.md
+GEMINI.md
+site_cache.json
+static/screenshots/
+tests/
+benchmark*.py

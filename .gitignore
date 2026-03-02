@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Testing
+.pytest_cache/
+
+# AI coding assistants
+.claude/
+CLAUDE.md
+GEMINI.md
+
+# Runtime
+site_cache.json

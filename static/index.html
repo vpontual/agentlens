@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentLens — The Web, But For Agents</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #080810;
+    --surface: #0f0f1a;
+    --surface2: #13131f;
+    --border: #1e1e30;
+    --accent: #6c6fff;
+    --accent2: #4ade80;
+    --accent3: #f472b6;
+    --text: #e8e8f0;
+    --muted: #5a5a7a;
+    --dim: #3a3a55;
+    --code-bg: #0d0d18;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Glow blobs ── */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -100px; }
+  .blob-2 { width: 500px; height: 500px; background: var(--accent3); bottom: -150px; right: -100px; }
+  .blob-3 { width: 300px; height: 300px; background: var(--accent2); top: 40%; left: 50%; transform: translateX(-50%); }
+
+  /* ── Layout ── */
+  .wrapper { position: relative; z-index: 1; }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+  .logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+  }
+  .logo span { color: var(--muted); }
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .nav-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.2);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .nav-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent3);
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 100px 40px 80px;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .hero-eyebrow::before,
+  .hero-eyebrow::after {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+  h1 {
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 900;
+    line-height: 1.08;
+    letter-spacing: -2px;
+    margin-bottom: 28px;
+  }
+  h1 .line-1 { color: var(--text); display: block; }
+  h1 .line-2 {
+    display: block;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 560px;
+    margin: 0 auto 48px;
+    line-height: 1.7;
+    font-weight: 300;
+  }
+  .hero-sub strong { color: var(--text); font-weight: 500; }
+
+  /* ── Stat pills ── */
+  .stats {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 60px;
+  }
+  .stat-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 12px;
+  }
+  .stat-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--accent2);
+  }
+  .stat-label { color: var(--muted); }
+
+  /* ── Terminal block ── */
+  .terminal {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 700px;
+    margin: 0 auto 60px;
+    box-shadow: 0 0 60px rgba(108,111,255,0.08);
+    text-align: left;
+  }
+  .terminal-bar {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+  .terminal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .terminal-body {
+    padding: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.9;
+  }
+  .t-comment { color: var(--dim); }
+  .t-cmd { color: var(--text); }
+  .t-cmd::before { content: '$ '; color: var(--accent2); }
+  .t-key { color: var(--accent3); }
+  .t-val { color: var(--accent2); }
+  .t-str { color: #fbbf24; }
+  .t-num { color: var(--accent); }
+  .t-muted { color: var(--muted); }
+  .t-blank { height: 8px; }
+
+  /* ── Features ── */
+  .section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 40px 100px;
+  }
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 48px;
+    line-height: 1.2;
+  }
+  .section-title span { color: var(--muted); }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 60px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .feature-icon {
+    font-size: 28px;
+    margin-bottom: 16px;
+    display: block;
+  }
+  .feature-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+  }
+  .feature-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .feature-tag {
+    display: inline-block;
+    margin-top: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    background: rgba(108,111,255,0.08);
+    border: 1px solid rgba(108,111,255,0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── Comparison table ── */
+  .compare-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 80px;
+  }
+  .compare-header {
+    padding: 20px 28px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 12px 20px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  th:not(:first-child) { text-align: right; }
+  td {
+    padding: 13px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    vertical-align: middle;
+  }
+  td:not(:first-child) { text-align: right; font-family: 'JetBrains Mono', monospace; }
+  tr:last-child td { border-bottom: none; }
+  .site-name { font-weight: 500; }
+  .site-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .raw-tok { color: var(--muted); }
+  .proxy-tok { color: var(--text); }
+  .reduction {
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .r-great { color: var(--accent2); }
+  .r-good  { color: #fbbf24; }
+  .r-warn  { color: var(--accent3); }
+  /* ── Quips ── */
+  .quips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 80px;
+  }
+  .quip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    font-size: 13px;
+  }
+  .quip-text {
+    color: var(--text);
+    font-style: italic;
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+  .quip-attr {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+  }
+
+  /* ── API reference ── */
+  .api-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .api-header {
+    padding: 10px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .method {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .method.get { background: rgba(74,222,128,0.15); color: var(--accent2); }
+  .method.post { background: rgba(108,111,255,0.15); color: var(--accent); }
+  .api-path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .api-desc { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .api-body {
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+  .param-name { color: var(--accent3); }
+  .param-type { color: var(--accent); }
+  .param-default { color: var(--accent2); }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    position: relative;
+    z-index: 1;
+  }
+  .footer-logo {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="wrapper">
+
+<nav>
+  <div></div>
+  <a href="/static/about.html" class="nav-note" style="text-decoration:none;">not for humans</a>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-eyebrow">your agent's new favorite website</div>
+  <h1>
+    <span class="line-1">Stop paying tokens for</span>
+    <span class="line-2">unnecessary &lt;div&gt;</span>
+  </h1>
+  <p class="hero-sub">
+    A proxy that converts any URL into <strong>clean, structured Markdown</strong> your agent can actually use —
+    without the megabyte of CSS, React boilerplate, and cookie consent dialogs nobody consented to.
+  </p>
+
+  <div class="stats">
+    <div class="stat-pill">
+      <span class="stat-num">98.6%</span>
+      <span class="stat-label">tokens saved on CNN</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-num">~2ms</span>
+      <span class="stat-label">to detect JS walls</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-num">0</span>
+      <span class="stat-label">cookie banners processed</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-num" style="font-size:22px">∞</span>
+      <span class="stat-label">divs mercilessly stripped</span>
+    </div>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+      <div class="terminal-title">agent → agentlens → internet</div>
+    </div>
+    <div class="terminal-body">
+      <div class="t-comment"># your agent does this instead of fetching raw HTML</div>
+      <div class="t-blank"></div>
+      <div class="t-cmd">curl -s http://localhost:7001/parse \</div>
+      <div style="padding-left:24px; font-family:'JetBrains Mono',monospace; font-size:12.5px;">
+        &nbsp;&nbsp;-d '<span class="t-str">{"url":"https://www.cnn.com"}</span>'
+      </div>
+      <div class="t-blank"></div>
+      <div class="t-comment"># raw CNN: 1,234,184 tokens of trauma</div>
+      <div class="t-comment"># with proxy: 17,021 tokens of actual news</div>
+      <div class="t-blank"></div>
+      <div class="t-muted">{</div>
+      <div style="padding-left:20px;">
+        <span class="t-key">"title"</span>: <span class="t-str">"Breaking News, Latest News and Videos | CNN"</span>,<br>
+        <span class="t-key">"render_mode"</span>: <span class="t-str">"static"</span>,<br>
+        <span class="t-key">"token_estimate"</span>: <span class="t-num">17021</span>,<br>
+        <span class="t-key">"content"</span>: <span class="t-str">"## Israel and Hezbollah trade blows..."</span>,<br>
+        <span class="t-key">"agent_hint"</span>: <span class="t-str">"Page: CNN | Type: article | Actions: 3"</span>
+      </div>
+      <div class="t-muted">}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section class="section">
+  <div class="section-label">what it does</div>
+  <div class="section-title">Everything your agent needs.<br><span>Nothing it doesn't.</span></div>
+
+  <div class="grid-3">
+    <div class="feature-card">
+      <span class="feature-icon">🏃</span>
+      <div class="feature-title">Static-first, browser fallback</div>
+      <div class="feature-desc">
+        Tries a fast static fetch first. If the page is huge but extraction returns almost nothing, it knows a JS framework ate the content. Falls back to headless Chromium automatically.
+      </div>
+      <span class="feature-tag">render_mode: "browser"</span>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">✂️</span>
+      <div class="feature-title">Aggressive noise removal</div>
+      <div class="feature-desc">
+        Strips nav, footer, scripts, styles, and everything else designed to make your agent's day worse. Trafilatura extracts the main content; if it whiffs, markdownify takes over.
+      </div>
+      <span class="feature-tag">quality gate fallback</span>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔬</span>
+      <div class="feature-title">Structured extraction</div>
+      <div class="feature-desc">
+        Title, description, markdown content, links, forms, and interactive elements — all in one JSON response. Your agent gets a schema, not a wall of text.
+      </div>
+      <span class="feature-tag">agent_hint included free</span>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🧠</span>
+      <div class="feature-title">Token-aware truncation</div>
+      <div class="feature-desc">
+        Set <code>max_tokens</code> and the proxy truncates cleanly at that boundary. Know exactly what you're spending before your LLM bill does.
+      </div>
+      <span class="feature-tag">token_estimate in response</span>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🕵️</span>
+      <div class="feature-title">JS wall detection</div>
+      <div class="feature-desc">
+        If the HTML is large but extraction yields almost nothing, that's a JS-rendered SPA pretending to be a website. Detected automatically and escalated to headless Chromium. Domain preferences are cached.
+      </div>
+      <span class="feature-tag">auto-escalation cached per domain</span>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📋</span>
+      <div class="feature-title">Scout before you fetch</div>
+      <div class="feature-desc">
+        <code>/agent-manifest</code> returns only links, forms, and buttons — zero content extraction. Map a site's navigation and interactive elements before committing tokens to a full parse.
+      </div>
+      <span class="feature-tag">GET /agent-manifest</span>
+    </div>
+  </div>
+
+  <!-- Benchmark table -->
+  <div class="section-label">real numbers</div>
+  <div class="section-title">The internet has a token problem.<br><span>We fixed it.</span></div>
+
+  <div class="compare-wrap">
+    <div class="compare-header">// benchmark: raw HTML tokens vs. agentlens tokens · static path · max_tokens=50000</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Site</th>
+          <th>Raw HTML</th>
+          <th>Proxy</th>
+          <th>Reduction</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="site-name">CNN</div><div class="site-note">Full front-page content extracted</div></td>
+          <td class="raw-tok">1,234,184</td>
+          <td class="proxy-tok">17,021</td>
+          <td class="reduction r-great">−98.6%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">New York Times</div><div class="site-note">Front-page teasers</div></td>
+          <td class="raw-tok">374,801</td>
+          <td class="proxy-tok">8,300</td>
+          <td class="reduction r-great">−97.8%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">BBC News</div><div class="site-note">Headlines and article teasers</div></td>
+          <td class="raw-tok">89,441</td>
+          <td class="proxy-tok">3,142</td>
+          <td class="reduction r-great">−96.5%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">ESPN</div><div class="site-note">Sports headlines extracted</div></td>
+          <td class="raw-tok">53,737</td>
+          <td class="proxy-tok">2,310</td>
+          <td class="reduction r-great">−95.7%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">Stack Overflow</div><div class="site-note">All answers + code blocks</div></td>
+          <td class="raw-tok">289,007</td>
+          <td class="proxy-tok">25,745</td>
+          <td class="reduction r-great">−91.1%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">GitHub Repo</div><div class="site-note">Stars, forks, description</div></td>
+          <td class="raw-tok">115,225</td>
+          <td class="proxy-tok">11,560</td>
+          <td class="reduction r-great">−90.0%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">Reddit</div><div class="site-note">Threads via old.reddit.com rewrite</div></td>
+          <td class="raw-tok">65,224</td>
+          <td class="proxy-tok">9,300</td>
+          <td class="reduction r-good">−85.7%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">MDN Web Docs</div><div class="site-note">Article + code examples + tables</div></td>
+          <td class="raw-tok">54,690</td>
+          <td class="proxy-tok">8,294</td>
+          <td class="reduction r-good">−84.8%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">NPR</div><div class="site-note">Full homepage content extracted</div></td>
+          <td class="raw-tok">264,933</td>
+          <td class="proxy-tok">44,784</td>
+          <td class="reduction r-good">−83.1%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">Hacker News</div><div class="site-note">Titles, scores, domains</div></td>
+          <td class="raw-tok">8,812</td>
+          <td class="proxy-tok">2,396</td>
+          <td class="reduction r-good">−72.8%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">Wikipedia</div><div class="site-note">Full article body preserved</div></td>
+          <td class="raw-tok">299,886</td>
+          <td class="proxy-tok">105,235</td>
+          <td class="reduction r-good">−64.9%</td>
+        </tr>
+        <tr>
+          <td><div class="site-name">Python Docs</div><div class="site-note">Full tutorial with sections</div></td>
+          <td class="raw-tok">26,525</td>
+          <td class="proxy-tok">13,262</td>
+          <td class="reduction r-good">−50.0%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Quips -->
+  <div class="quips">
+    <div class="quip">
+      <div class="quip-text">"Finally, a use for headless Chrome that doesn't involve a 400-line Puppeteer script and three npm vulnerabilities."</div>
+      <div class="quip-attr">// hypothetical agent testimonial</div>
+    </div>
+    <div class="quip">
+      <div class="quip-text">"I used to spend 99% of my context window on CNN's ad targeting JavaScript. Now I just read the news."</div>
+      <div class="quip-attr">// gpt-4o, probably</div>
+    </div>
+<div class="quip">
+      <div class="quip-text">"This proxy has strong opinions about &lt;nav&gt; tags. We respect that."</div>
+      <div class="quip-attr">// an agent that used to read footers</div>
+    </div>
+  </div>
+
+  <!-- API reference -->
+  <div class="section-label">usage</div>
+  <div class="section-title">Four endpoints.<br><span>Your agent will figure it out.</span></div>
+
+  <div class="api-block">
+    <div class="api-header">
+      <span class="method get">GET</span>
+      <span class="api-path">/parse?url={url}&amp;max_tokens={n}&amp;force_browser={bool}</span>
+      <span class="api-desc">full page → structured JSON</span>
+    </div>
+    <div class="api-body">
+      <span class="param-name">url</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="param-type">string</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;required<br>
+      <span class="param-name">max_tokens</span>&nbsp;&nbsp;&nbsp;<span class="param-type">int</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;default: <span class="param-default">2000</span><br>
+      <span class="param-name">include_links</span>&nbsp;<span class="param-type">bool</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;default: <span class="param-default">true</span><br>
+      <span class="param-name">include_actions</span> <span class="param-type">bool</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;default: <span class="param-default">true</span><br>
+      <span class="param-name">force_browser</span>&nbsp;<span class="param-type">bool</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;default: <span class="param-default">false</span>
+    </div>
+  </div>
+
+  <div class="api-block">
+    <div class="api-header">
+      <span class="method post">POST</span>
+      <span class="api-path">/parse</span>
+      <span class="api-desc">same, but JSON body</span>
+    </div>
+    <div class="api-body">
+      <span class="t-muted">{</span> <span class="param-name">"url"</span>: <span class="t-str">"https://..."</span>, <span class="param-name">"max_tokens"</span>: <span class="t-num">2000</span>, <span class="param-name">"force_browser"</span>: <span class="t-val">false</span> <span class="t-muted">}</span>
+    </div>
+  </div>
+
+  <div class="api-block">
+    <div class="api-header">
+      <span class="method post">POST</span>
+      <span class="api-path">/batch-parse</span>
+      <span class="api-desc">multiple URLs, streamed as NDJSON</span>
+    </div>
+    <div class="api-body">
+      <span class="t-muted">{</span> <span class="param-name">"urls"</span>: <span class="t-str">["https://...", "https://..."]</span>, <span class="param-name">"max_tokens"</span>: <span class="t-num">2000</span> <span class="t-muted">}</span><br>
+      <span class="t-comment">// streams results as newline-delimited JSON, 5 concurrent</span>
+    </div>
+  </div>
+
+  <div class="api-block">
+    <div class="api-header">
+      <span class="method get">GET</span>
+      <span class="api-path">/agent-manifest?url={url}</span>
+      <span class="api-desc">links + forms only, zero content tokens</span>
+    </div>
+    <div class="api-body">
+      Returns actions, links, and agent_hint. No content extraction. Ideal for mapping before fetching.<br>
+      <span class="t-comment">// use this when you're lost and too proud to admit it</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">agentlens</div>
+  <div>not designed for human eyes · <code style="font-size:11px;">/health → {"status":"ok"}</code></div>
+  <div>the web, but make it parseable</div>
+</footer>
+
+</div>
+</body>
+</html>

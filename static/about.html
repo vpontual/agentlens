@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentLens — So You're a Human</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #080810;
+    --surface: #0f0f1a;
+    --surface2: #13131f;
+    --border: #1e1e30;
+    --accent: #6c6fff;
+    --accent2: #4ade80;
+    --accent3: #f472b6;
+    --text: #e8e8f0;
+    --muted: #5a5a7a;
+    --dim: #3a3a55;
+    --code-bg: #0d0d18;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Glow blobs ── */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -100px; }
+  .blob-2 { width: 500px; height: 500px; background: var(--accent3); bottom: -150px; right: -100px; }
+  .blob-3 { width: 300px; height: 300px; background: var(--accent2); top: 40%; left: 50%; transform: translateX(-50%); }
+
+  /* ── Layout ── */
+  .wrapper { position: relative; z-index: 1; }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+  .nav-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-link:hover { color: var(--text); }
+  .nav-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent3);
+  }
+
+  /* ── Content ── */
+  .content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 80px 40px 100px;
+  }
+
+  .page-title {
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    margin-bottom: 48px;
+    background: linear-gradient(135deg, var(--accent3) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .section-heading {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    margin-top: 64px;
+  }
+  .section-heading:first-of-type { margin-top: 0; }
+
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  p {
+    color: var(--muted);
+    line-height: 1.8;
+    margin-bottom: 20px;
+    font-weight: 300;
+  }
+  p strong { color: var(--text); font-weight: 500; }
+
+  /* ── Type cards ── */
+  .type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .type-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .type-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .type-name.t-article { color: var(--text); }
+  .type-name.t-thread { color: var(--accent); }
+  .type-name.t-docs { color: var(--accent2); }
+  .type-name.t-serp { color: #fbbf24; }
+  .type-name.t-ecom { color: var(--accent3); }
+  .type-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── Setup methods ── */
+  .setup-method {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .setup-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+  .setup-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .setup-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+
+  /* ── Code blocks ── */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-block .t-comment { color: var(--dim); }
+  .code-block .t-key { color: var(--accent3); }
+  .code-block .t-str { color: #fbbf24; }
+  .code-block .t-val { color: var(--accent2); }
+  .code-block .t-num { color: var(--accent); }
+  .code-block .t-muted { color: var(--muted); }
+  .code-block .t-cmd { color: var(--text); }
+  .code-block .t-cmd::before { content: '$ '; color: var(--accent2); }
+
+  /* ── Endpoint list ── */
+  .endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .endpoint {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .method-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .method-badge.get { background: rgba(74,222,128,0.15); color: var(--accent2); }
+  .method-badge.post { background: rgba(108,111,255,0.15); color: var(--accent); }
+  .endpoint-path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .endpoint-desc {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    position: relative;
+    z-index: 1;
+  }
+  .footer-logo {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-size: 12px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .content { padding: 48px 20px 80px; }
+    nav { padding: 16px 20px; }
+    footer { padding: 20px; flex-direction: column; gap: 8px; }
+    .endpoint { flex-direction: column; gap: 6px; }
+    .endpoint-desc { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="wrapper">
+
+<nav>
+  <a href="/" class="nav-link">&larr; back to home</a>
+  <div class="nav-note">not for humans</div>
+</nav>
+
+<div class="content">
+
+  <h1 class="page-title">So you're a human.</h1>
+
+  <p>
+    You clicked the thing that said "not for humans." Bold move. This is
+    <strong>AgentLens</strong> &mdash; a local server that converts any URL into
+    clean, structured JSON that AI agents can actually work with. It strips the
+    megabyte of CSS, ad-tracking JavaScript, cookie banners, and React hydration
+    noise, then hands your agent just the content, links, and forms it needs.
+  </p>
+  <p>
+    It runs on <strong>localhost:7001</strong>. Your data never leaves your machine.
+  </p>
+
+  <!-- ── What your agent gets ── -->
+  <div class="section-heading">what your agent gets</div>
+  <h2>Five response types, auto-detected</h2>
+  <p>
+    The proxy inspects each page and picks the extraction strategy that fits.
+    Your agent doesn't need to know anything about HTML.
+  </p>
+
+  <div class="type-grid">
+    <div class="type-card">
+      <div class="type-name t-article">article</div>
+      <div class="type-desc">News, blogs, wikis. Clean Markdown body with metadata.</div>
+    </div>
+    <div class="type-card">
+      <div class="type-name t-thread">thread</div>
+      <div class="type-desc">Reddit, forums, Q&A. Flat-tree messages with parent IDs.</div>
+    </div>
+    <div class="type-card">
+      <div class="type-name t-docs">documentation</div>
+      <div class="type-desc">Docs sites. Sections chunked by header, code blocks and tables preserved.</div>
+    </div>
+    <div class="type-card">
+      <div class="type-name t-serp">serp</div>
+      <div class="type-desc">Google results. Structured array of titles, URLs, and snippets.</div>
+    </div>
+    <div class="type-card">
+      <div class="type-name t-ecom">ecommerce</div>
+      <div class="type-desc">Product pages. Price, SKU, availability, and description.</div>
+    </div>
+  </div>
+
+  <!-- ── How to point your agent here ── -->
+  <div class="section-heading">setup</div>
+  <h2>How to point your agent here</h2>
+
+  <div class="setup-method">
+    <div class="setup-num">01</div>
+    <div class="setup-title">Self-onboarding</div>
+    <div class="setup-desc">
+      Tell your agent to read the instructions endpoint. It gets a plain-text
+      briefing with all capabilities, endpoints, and response fields.
+    </div>
+    <div class="code-block"><span class="t-cmd">curl http://localhost:7001/instructions</span></div>
+  </div>
+
+  <div class="setup-method">
+    <div class="setup-num">02</div>
+    <div class="setup-title">Tool definition</div>
+    <div class="setup-desc">
+      If your agent supports tool calling, give it this schema. It can then
+      call <code style="color:var(--accent);">web_browse</code> whenever it needs to read a URL.
+    </div>
+    <div class="code-block">{
+  <span class="t-key">"name"</span>: <span class="t-str">"web_browse"</span>,
+  <span class="t-key">"description"</span>: <span class="t-str">"Fetch a URL and return structured content as JSON"</span>,
+  <span class="t-key">"input_schema"</span>: {
+    <span class="t-key">"type"</span>: <span class="t-str">"object"</span>,
+    <span class="t-key">"properties"</span>: {
+      <span class="t-key">"url"</span>: { <span class="t-key">"type"</span>: <span class="t-str">"string"</span>, <span class="t-key">"description"</span>: <span class="t-str">"URL to fetch"</span> },
+      <span class="t-key">"max_tokens"</span>: { <span class="t-key">"type"</span>: <span class="t-str">"integer"</span>, <span class="t-key">"default"</span>: <span class="t-num">2000</span> }
+    },
+    <span class="t-key">"required"</span>: [<span class="t-str">"url"</span>]
+  }
+}</div>
+  </div>
+
+  <div class="setup-method">
+    <div class="setup-num">03</div>
+    <div class="setup-title">System prompt snippet</div>
+    <div class="setup-desc">
+      Drop this into your agent's system prompt and it'll know what to do.
+    </div>
+    <div class="code-block"><span class="t-comment"># paste into your system prompt</span>
+When you need to read a web page, POST to http://localhost:7001/parse
+with {"url": "..."} and use the returned JSON content, links, and actions.</div>
+  </div>
+
+  <!-- ── Quick start ── -->
+  <div class="section-heading">quick start</div>
+  <h2>Up and running in 30 seconds</h2>
+
+  <div class="setup-method">
+    <div class="setup-num">Docker (recommended)</div>
+    <div class="code-block"><span class="t-cmd">docker run -p 7001:7001 agentlens</span>
+
+<span class="t-comment"># test it</span>
+<span class="t-cmd">curl "http://localhost:7001/parse?url=https://example.com"</span></div>
+  </div>
+
+  <div class="setup-method">
+    <div class="setup-num">From source</div>
+    <div class="code-block"><span class="t-cmd">git clone https://github.com/vpontual/agentlens && cd agentlens</span>
+<span class="t-cmd">pip install -r requirements.txt</span>
+<span class="t-cmd">python -m playwright install chromium</span>
+<span class="t-cmd">uvicorn main:app --host 0.0.0.0 --port 7001</span></div>
+  </div>
+
+  <!-- ── Endpoints ── -->
+  <div class="section-heading">endpoints</div>
+  <h2>Four endpoints, zero configuration</h2>
+
+  <div class="endpoint-list">
+    <div class="endpoint">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-path">/parse?url=...</span>
+      <span class="endpoint-desc">Full page &rarr; structured JSON with content, links, and actions</span>
+    </div>
+    <div class="endpoint">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-path">/agent-manifest?url=...</span>
+      <span class="endpoint-desc">Links + forms only, zero content tokens &mdash; scout before you fetch</span>
+    </div>
+    <div class="endpoint">
+      <span class="method-badge post">POST</span>
+      <span class="endpoint-path">/batch-parse</span>
+      <span class="endpoint-desc">Multiple URLs, streamed as newline-delimited JSON</span>
+    </div>
+    <div class="endpoint">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-path">/instructions</span>
+      <span class="endpoint-desc">Plain-text LLM self-onboarding prompt</span>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="footer-logo">agentlens</div>
+  <div>you were warned</div>
+  <div><a href="/" class="nav-link">home</a></div>
+</footer>
+
+</div>
+</body>
+</html>
