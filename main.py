@@ -538,26 +538,28 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def get_instructions():
     return """# AgentLens: LLM Instructions
 
-You are using a specialized HTTP proxy that converts the chaotic human web into high-signal JSON for AI agents.
+You are using a specialized HTTP proxy that converts the chaotic human web into high-signal JSON for AI agents. No API key or authentication is required. There are no rate limits.
 
 ## Core Capabilities:
-1. **Multi-Pattern Extraction**: We automatically detect site types (article, thread, documentation, serp, ecommerce).
+1. **Multi-Pattern Extraction**: We automatically detect site types: `article`, `thread`, `documentation`, `serp`, `ecommerce`, `search_config`. If no specific pattern matches, the page defaults to `article`.
 2. **Interaction Mapping**: Use the `actions` array to find forms and primary buttons (CTAs).
 3. **Smart Navigation**: Use the `links` array. Internal links are marked `is_nav: true`.
 4. **JS Fallback**: If a site is a heavy SPA, we use Playwright. Preferences are cached per domain.
 
 ## How to use:
-- **General Fetch**: Use `GET /parse?url={url}`.
-- **Scout First**: Use `GET /agent-manifest?url={url}` to get only links and forms — zero content tokens. Map a site before committing to a full fetch.
-- **Bulk Research**: Use `POST /batch-parse` with a list of URLs to stream structured signal.
+- **General Fetch**: `GET /parse?url={url}` — returns full structured content + interactions.
+- **Scout First**: `GET /agent-manifest?url={url}` — returns page title, links, and forms only. No content body is extracted, saving tokens. Use this to map a site before committing to a full fetch.
+- **Bulk Research**: `POST /batch-parse` with `{"urls": [...]}` — streams NDJSON, one result per line.
 - **Handling Paywalls**: If `wall_type` is present, look for the 'login' or 'subscribe' link in `actions`.
-- **Search**: If `type: search_config` appears, use the `search_template` to perform internal site searches.
+- **Site Search**: If `type: search_config` appears, use the `search_template` URL with your query. Example: if `search_template` is `https://example.com/search?q={query}`, replace `{query}` with your search terms and fetch that URL.
 
-## Response Field Guide:
-- `content`: Clean Markdown body.
-- `type: thread`: Look for `messages` (a flat-tree of discussion).
-- `type: documentation`: Look for `sections` (chunked by header).
-- `type: serp`: Look for `results` (organic search links).
+## Page Types:
+- `article`: Default. General web pages, news, blogs. Look for `content` (clean Markdown).
+- `thread`: Discussion pages — forums, Reddit, Hacker News, comment trees. Look for `messages` (flat array with `parent_id` references to reconstruct the tree).
+- `documentation`: Technical docs with code blocks. Look for `sections` (chunked by header, up to 50).
+- `serp`: Search engine results pages (Google, Bing, etc.). Look for `results` (organic search links).
+- `ecommerce`: Product pages. Look for `product` (price, SKU, availability).
+- `search_config`: Pages with a detectable site search. Look for `search_template` (URL with `{query}` placeholder).
 """
 
 @app.get("/parse")
