@@ -78,7 +78,9 @@ AgentLens is designed to be used autonomously by LLMs.
 
 ### 1. Self-Onboarding
 Tell your model to read its own manual:
-> "Go to `http://localhost:7001/instructions` to understand your web capabilities."
+> "Run `curl https://your-agentlens-host/instructions` and follow the instructions."
+
+Set the `AGENTLENS_PUBLIC_URL` environment variable so the instructions include your real base URL with full endpoint examples. The instructions also prompt the agent to save the config to memory, so it persists across context compaction.
 
 ### 2. Tool Definition (Function Calling)
 If your model supports tool calling, use this schema:
