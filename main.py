@@ -548,17 +548,17 @@ You are using a specialized HTTP proxy that converts the chaotic human web into 
 
 ## How to use:
 - **General Fetch**: `GET /parse?url={url}` — returns full structured content + interactions.
-- **Scout First**: `GET /agent-manifest?url={url}` — returns page title, links, and forms only. No content body is extracted, saving tokens. Use this to map a site before committing to a full fetch.
-- **Bulk Research**: `POST /batch-parse` with `{"urls": [...]}` — streams NDJSON, one result per line.
+- **Scout First**: `GET /agent-manifest?url={url}` — returns `title`, `links`, and `actions` only. No content body or description is extracted, saving tokens. Use this to map a site before committing to a full fetch.
+- **Bulk Research**: `POST /batch-parse` with `{"urls": [...]}` — streams NDJSON, one result per line. If a URL fails, its line contains `"error"` and `"status_code"` — the stream continues for all remaining URLs.
 - **Handling Paywalls**: If `wall_type` is present, look for the 'login' or 'subscribe' link in `actions`.
 - **Site Search**: If `type: search_config` appears, use the `search_template` URL with your query. Example: if `search_template` is `https://example.com/search?q={query}`, replace `{query}` with your search terms and fetch that URL.
 
 ## Page Types:
 - `article`: Default. General web pages, news, blogs. Look for `content` (clean Markdown).
-- `thread`: Discussion pages — forums, Reddit, Hacker News, comment trees. Look for `messages` (flat array with `parent_id` references to reconstruct the tree).
+- `thread`: Discussion pages — forums, Reddit, Hacker News, comment trees. Look for `messages` (flat array). Each message has `id` (int), `pid` (parent message ID, `null` for root messages), `author`, and `text`.
 - `documentation`: Technical docs with code blocks. Look for `sections` (chunked by header, up to 50).
 - `serp`: Search engine results pages (Google, Bing, etc.). Look for `results` (organic search links).
-- `ecommerce`: Product pages. Look for `product` (price, SKU, availability).
+- `ecommerce`: Product pages. Look for `product` object with `price`, `currency`, `sku`, and `availability` (all optional — fields are `null` if not found in page markup).
 - `search_config`: Pages with a detectable site search. Look for `search_template` (URL with `{query}` placeholder).
 """
 
