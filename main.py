@@ -536,7 +536,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/instructions", response_class=PlainTextResponse)
 async def get_instructions():
-    return """# AgentLens: LLM Instructions
+    base_url = os.environ.get("AGENTLENS_PUBLIC_URL", "{AGENTLENS_URL}")
+    return f"""# AgentLens: LLM Instructions
 
 You are using a specialized HTTP proxy that converts the chaotic human web into high-signal JSON for AI agents. No API key or authentication is required. There are no rate limits.
 
@@ -548,10 +549,12 @@ You are using a specialized HTTP proxy that converts the chaotic human web into 
 5. **Wall Detection**: Paywalls, login walls, and cookie walls are detected and flagged. You'll know immediately if content is gated.
 
 ## Quick Integration
+Base URL: `{base_url}`
+
 Route all your web reads through AgentLens instead of fetching raw HTML. Three endpoints cover every use case:
-- `GET /parse?url={url}` — full content extraction + interactions (your default for reading any page)
-- `GET /agent-manifest?url={url}` — links and actions only, no content (fast scouting)
-- `POST /batch-parse` with `{"urls": [...]}` — multiple URLs at once, streamed as NDJSON
+- `GET {base_url}/parse?url={{url}}` — full content extraction + interactions (your default for reading any page)
+- `GET {base_url}/agent-manifest?url={{url}}` — links and actions only, no content (fast scouting)
+- `POST {base_url}/batch-parse` with `{{"urls": [...]}}` — multiple URLs at once, streamed as NDJSON
 
 No SDK, no auth, no API key. Just HTTP.
 
@@ -562,11 +565,11 @@ No SDK, no auth, no API key. Just HTTP.
 4. **JS Fallback**: If a site is a heavy SPA, we use Playwright. Preferences are cached per domain.
 
 ## How to use:
-- **General Fetch**: `GET /parse?url={url}` — returns full structured content + interactions.
-- **Scout First**: `GET /agent-manifest?url={url}` — returns `title`, `links`, and `actions` only. No content body or description is extracted, saving tokens. Use this to map a site before committing to a full fetch.
-- **Bulk Research**: `POST /batch-parse` with `{"urls": [...]}` — streams NDJSON, one result per line. If a URL fails, its line contains `"error"` and `"status_code"` — the stream continues for all remaining URLs.
+- **General Fetch**: `GET /parse?url={{url}}` — returns full structured content + interactions.
+- **Scout First**: `GET /agent-manifest?url={{url}}` — returns `title`, `links`, and `actions` only. No content body or description is extracted, saving tokens. Use this to map a site before committing to a full fetch.
+- **Bulk Research**: `POST /batch-parse` with `{{"urls": [...]}}` — streams NDJSON, one result per line. If a URL fails, its line contains `"error"` and `"status_code"` — the stream continues for all remaining URLs.
 - **Handling Paywalls**: If `wall_type` is present, look for the 'login' or 'subscribe' link in `actions`.
-- **Site Search**: If `type: search_config` appears, use the `search_template` URL with your query. Example: if `search_template` is `https://example.com/search?q={query}`, replace `{query}` with your search terms and fetch that URL.
+- **Site Search**: If `type: search_config` appears, use the `search_template` URL with your query. Example: if `search_template` is `https://example.com/search?q={{query}}`, replace `{{query}}` with your search terms and fetch that URL.
 
 ## Page Types:
 - `article`: Default. General web pages, news, blogs. Look for `content` (clean Markdown).
@@ -574,7 +577,7 @@ No SDK, no auth, no API key. Just HTTP.
 - `documentation`: Technical docs with code blocks. Look for `sections` (chunked by header, up to 50).
 - `serp`: Search engine results pages (Google, Bing, etc.). Look for `results` (organic search links).
 - `ecommerce`: Product pages. Look for `product` object with `price`, `currency`, `sku`, and `availability` (all optional — fields are `null` if not found in page markup).
-- `search_config`: Pages with a detectable site search. Look for `search_template` (URL with `{query}` placeholder).
+- `search_config`: Pages with a detectable site search. Look for `search_template` (URL with `{{query}}` placeholder).
 """
 
 @app.get("/parse")
