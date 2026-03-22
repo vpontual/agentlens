@@ -181,7 +181,19 @@ class SERPPattern(BasePattern):
         return {"type": "serp", "title": f"Search Results: {domain}", "results": results[:15]}
 
 class ECommercePattern(BasePattern):
+    ECOMMERCE_DOMAINS = [
+        "amazon.com", "amazon.co.uk", "amazon.ca", "amazon.de",
+        "target.com", "bestbuy.com", "ebay.com", "walmart.com",
+        "etsy.com", "newegg.com", "bhphotovideo.com", "adorama.com",
+        "homedepot.com", "lowes.com", "costco.com", "macys.com",
+        "nordstrom.com", "zappos.com", "wayfair.com", "microcenter.com",
+    ]
+
     def matches(self, url: str, soup: BeautifulSoup) -> bool:
+        # Known e-commerce domains — always match
+        domain = urlparse(url).netloc.lower()
+        if any(d in domain for d in self.ECOMMERCE_DOMAINS):
+            return True
         # Check JSON-LD for Product type (handles arrays and @graph)
         for script in soup.find_all("script", type="application/ld+json"):
             text = script.string
@@ -193,18 +205,26 @@ class ECommercePattern(BasePattern):
                     return True
             except (json.JSONDecodeError, TypeError, KeyError):
                 continue
-        # Structural signals: require 2+ ecommerce indicators
+        # Structural signals: require 2+ ecommerce indicators (expanded selectors)
         signals = 0
-        if soup.select('.price, .product-price, .offer-price'):
+        if soup.select('.price, .product-price, .offer-price, .a-price, '
+                       '[data-test="product-price"], .priceView-customer-price, '
+                       '.x-price-primary, [itemprop="price"], .a-offscreen'):
             signals += 1
-        if soup.select('.add-to-cart, .add_to_cart, [data-action="add-to-cart"], button[name="add"]'):
+        if soup.select('.add-to-cart, .add_to_cart, [data-action="add-to-cart"], '
+                       'button[name="add"], [class*="add-to-cart"], '
+                       '#add-to-cart-button, [data-test="addToCartButton"], '
+                       '.add-to-cart-button'):
             signals += 1
-        if soup.select('.product-detail, .product-info, .pdp-main, #product-detail, #product'):
+        if soup.select('.product-detail, .product-info, .pdp-main, '
+                       '#product-detail, #product, #productTitle, #ppd, '
+                       '#dp-container, [data-test="product-title"]'):
             signals += 1
         return signals >= 2
 
     async def extract(self, url: str, html: str, soup: BeautifulSoup) -> Dict[str, Any]:
         pdata = {"price": None, "currency": None, "sku": None, "availability": None}
+        # Try JSON-LD first (cleanest source)
         for script in soup.find_all("script", type="application/ld+json"):
             text = script.string
             if not text:
@@ -224,8 +244,107 @@ class ECommercePattern(BasePattern):
                     break
             except (json.JSONDecodeError, TypeError, KeyError):
                 continue
+
+        # Site-specific fallback when JSON-LD is missing
+        domain = urlparse(url).netloc.lower()
+        if not pdata["price"]:
+            if "amazon.com" in domain or "amazon.co" in domain:
+                pdata = self._extract_amazon(soup, pdata)
+            elif "target.com" in domain:
+                pdata = self._extract_target(soup, pdata)
+            elif "bestbuy.com" in domain:
+                pdata = self._extract_bestbuy(soup, pdata)
+            elif "ebay.com" in domain:
+                pdata = self._extract_ebay(soup, pdata)
+            else:
+                pdata = self._extract_generic(soup, pdata)
+
         title = soup.title.string.strip() if soup.title and soup.title.string else "Product"
         return {"type": "ecommerce", "title": title, "product": pdata}
+
+    @staticmethod
+    def _extract_amazon(soup: BeautifulSoup, pdata: dict) -> dict:
+        """Extract price from Amazon product pages. Targets the deal/sale price, not list price."""
+        # The first .a-offscreen inside a price container is the current selling price
+        price_el = soup.select_one(
+            "#corePrice_feature_div .a-price .a-offscreen, "
+            "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen, "
+            ".a-price .a-offscreen"
+        )
+        if price_el:
+            price_text = price_el.get_text(strip=True)
+            price_match = re.search(r"[\d,.]+", price_text)
+            if price_match:
+                pdata["price"] = price_match.group().replace(",", "")
+                pdata["currency"] = "USD" if "$" in price_text else None
+        avail = soup.select_one("#availability span, #availability_feature_div span")
+        if avail:
+            pdata["availability"] = avail.get_text(strip=True)
+        asin_input = soup.select_one("input[name=ASIN]")
+        if asin_input:
+            pdata["sku"] = asin_input.get("value")
+        return pdata
+
+    @staticmethod
+    def _extract_target(soup: BeautifulSoup, pdata: dict) -> dict:
+        """Extract price from Target product pages."""
+        price_el = soup.select_one('[data-test="product-price"], .styles__CurrentPriceFontSize')
+        if price_el:
+            price_match = re.search(r"[\d,.]+", price_el.get_text())
+            if price_match:
+                pdata["price"] = price_match.group().replace(",", "")
+                pdata["currency"] = "USD"
+        return pdata
+
+    @staticmethod
+    def _extract_bestbuy(soup: BeautifulSoup, pdata: dict) -> dict:
+        """Extract price from Best Buy product pages."""
+        price_el = soup.select_one(
+            '.priceView-customer-price span, '
+            '[data-testid="customer-price"] span'
+        )
+        if price_el:
+            price_match = re.search(r"[\d,.]+", price_el.get_text())
+            if price_match:
+                pdata["price"] = price_match.group().replace(",", "")
+                pdata["currency"] = "USD"
+        return pdata
+
+    @staticmethod
+    def _extract_ebay(soup: BeautifulSoup, pdata: dict) -> dict:
+        """Extract price from eBay product pages."""
+        price_el = soup.select_one(
+            '.x-price-primary span, [itemprop="price"], '
+            '.x-bin-price .x-price-primary'
+        )
+        if price_el:
+            price_match = re.search(r"[\d,.]+", price_el.get_text())
+            if price_match:
+                pdata["price"] = price_match.group().replace(",", "")
+                pdata["currency"] = "USD"
+        condition_el = soup.select_one('.x-item-condition-text span, [itemprop="itemCondition"]')
+        if condition_el:
+            pdata["availability"] = condition_el.get_text(strip=True)
+        return pdata
+
+    @staticmethod
+    def _extract_generic(soup: BeautifulSoup, pdata: dict) -> dict:
+        """Fallback: try meta tags and common price selectors."""
+        meta_price = soup.find("meta", itemprop="price") or soup.find("meta", property="product:price:amount")
+        if meta_price and meta_price.get("content"):
+            pdata["price"] = meta_price["content"]
+            currency_meta = soup.find("meta", itemprop="priceCurrency") or soup.find("meta", property="product:price:currency")
+            if currency_meta and currency_meta.get("content"):
+                pdata["currency"] = currency_meta["content"]
+        else:
+            for sel in [".price", ".product-price", ".offer-price", '[itemprop="price"]']:
+                el = soup.select_one(sel)
+                if el:
+                    price_match = re.search(r"[\d,.]+", el.get_text())
+                    if price_match:
+                        pdata["price"] = price_match.group().replace(",", "")
+                        break
+        return pdata
 
 class SearchPattern(BasePattern):
     def matches(self, url: str, soup: BeautifulSoup) -> bool:
@@ -289,7 +408,7 @@ class DocumentationPattern(BasePattern):
 
     def matches(self, url: str, soup: BeautifulSoup) -> bool:
         # TOC elements
-        if soup.find(id=re.compile(r"toc|table-of-contents", re.I)) or soup.find(class_=re.compile(r"toc|table-of-contents", re.I)):
+        if soup.find(id=re.compile(r"^toc$|^toc[-_]|table-of-contents", re.I)) or soup.find(class_=re.compile(r"(?:^|\s)toc(?:\s|$)|table-of-contents", re.I)):
             return True
         parsed = urlparse(url)
         domain = parsed.netloc
@@ -526,7 +645,7 @@ async def _parse_url(url: str, max_tokens: int = 2000, include_links: bool = Tru
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.client = httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=12.0)
+    app.state.client = httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=12.0, verify=False)
     yield
     await app.state.client.aclose()
     await BROWSER_POOL.close()
