@@ -1,0 +1,8 @@
+services:
+  agentlens:
+    build: .
+    image: agentlens
+    container_name: agentlens
+    network_mode: host
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 7001
