@@ -501,21 +501,92 @@ class YoutubePattern(BasePattern):
 
     @staticmethod
     def _get_transcript(video_id: str) -> Optional[str]:
-        """Blocking transcript fetch. Prefers manual English, falls back to
-        auto-generated / any available language. Returns None if none exist."""
+        """Blocking transcript fetch. Primary path is yt-dlp, which pulls captions
+        via the player API and works from datacenter IPs where YouTube returns an
+        empty transcript-XML body (the youtube-transcript-api failure mode). Falls
+        back to youtube-transcript-api (works from residential IPs)."""
+        text = YoutubePattern._transcript_via_ytdlp(video_id)
+        if text:
+            return text
+        return YoutubePattern._transcript_via_api(video_id)
+
+    @staticmethod
+    def _transcript_via_ytdlp(video_id: str) -> Optional[str]:
+        try:
+            import yt_dlp
+            import httpx as _httpx
+        except Exception as e:  # pragma: no cover - dep guarded
+            logger.warning(f"yt-dlp unavailable: {e}")
+            return None
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        opts = {"skip_download": True, "quiet": True, "no_warnings": True,
+                "writesubtitles": True, "writeautomaticsub": True}
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as e:
+            logger.warning(f"yt-dlp extract failed for {video_id}: {e}")
+            return None
+        # Manual subs first, then auto-captions; English preferred, else any language.
+        for tracks in (info.get("subtitles") or {}, info.get("automatic_captions") or {}):
+            langs = [l for l in ("en", "en-US", "en-GB") if l in tracks] or list(tracks.keys())
+            for lang in langs:
+                fmts = tracks.get(lang) or []
+                fmt = next((f for f in fmts if f.get("ext") == "json3"), fmts[0] if fmts else None)
+                if not fmt or not fmt.get("url"):
+                    continue
+                try:
+                    r = _httpx.get(fmt["url"], timeout=15, follow_redirects=True)
+                    if r.status_code != 200 or not r.text.strip():
+                        continue
+                    parsed = YoutubePattern._parse_caption(r.text, fmt.get("ext", ""))
+                    if parsed:
+                        return parsed
+                except Exception:
+                    continue
+        return None
+
+    @staticmethod
+    def _parse_caption(body: str, ext: str) -> Optional[str]:
+        """Parse a caption track. json3 = {"events":[{"segs":[{"utf8":..}]}]}; also
+        tolerates vtt/srv (strip cue numbers, timestamps, tags)."""
+        if ext == "json3" or body.lstrip().startswith("{"):
+            try:
+                import json as _json
+                data = _json.loads(body)
+                parts = [seg.get("utf8", "")
+                         for ev in (data.get("events") or [])
+                         for seg in (ev.get("segs") or [])
+                         if seg.get("utf8") and seg.get("utf8") != "\n"]
+                return " ".join("".join(parts).split()) or None
+            except Exception:
+                pass
+        import re as _re
+        out = []
+        for ln in body.splitlines():
+            ln = ln.strip()
+            if (not ln or "-->" in ln or ln.isdigit()
+                    or ln.upper().startswith("WEBVTT")
+                    or ln.startswith(("Kind:", "Language:"))):
+                continue
+            ln = _re.sub(r"<[^>]+>", "", ln)
+            if ln:
+                out.append(ln)
+        return " ".join(" ".join(out).split()) or None
+
+    @staticmethod
+    def _transcript_via_api(video_id: str) -> Optional[str]:
         try:
             from youtube_transcript_api import YouTubeTranscriptApi
             from youtube_transcript_api._errors import (
                 TranscriptsDisabled, NoTranscriptFound, VideoUnavailable,
             )
-        except Exception as e:  # pragma: no cover - import guarded for envs without dep
+        except Exception as e:  # pragma: no cover - dep guarded
             logger.warning(f"youtube-transcript-api unavailable: {e}")
             return None
-
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             entries = None
-            # Prefer a manually-created transcript, then auto-generated, then anything.
             for finder in (
                 lambda: transcript_list.find_manually_created_transcript(["en", "en-US", "en-GB"]),
                 lambda: transcript_list.find_generated_transcript(["en", "en-US", "en-GB"]),
@@ -526,7 +597,6 @@ class YoutubePattern(BasePattern):
                 except NoTranscriptFound:
                     continue
             if entries is None:
-                # Fall back to the first available transcript in any language.
                 for t in transcript_list:
                     try:
                         entries = t.fetch()
