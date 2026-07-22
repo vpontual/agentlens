@@ -1,6 +1,11 @@
+import io
 import pytest
+from unittest.mock import patch, MagicMock
 from bs4 import BeautifulSoup
-from main import ThreadPattern, DocumentationPattern, SERPPattern, ECommercePattern, SearchPattern
+from main import (
+    ThreadPattern, DocumentationPattern, SERPPattern, ECommercePattern,
+    SearchPattern, YoutubePattern, PdfPattern,
+)
 
 # --- SERP Pattern ---
 
@@ -403,3 +408,95 @@ async def test_documentation_extract_includes_tables():
     params_section = next(s for s in res["sections"] if s["title"] == "Parameters")
     assert "timeout" in params_section["content"]
     assert "retries" in params_section["content"]
+
+# --- YouTube Pattern ---
+
+def test_youtube_matches_watch():
+    p = YoutubePattern()
+    assert p.matches("https://www.youtube.com/watch?v=dQw4w9WgXcQ", None) is True
+    assert p.matches("https://m.youtube.com/watch?v=dQw4w9WgXcQ", None) is True
+    assert p.matches("https://youtu.be/dQw4w9WgXcQ", None) is True
+    assert p.matches("https://www.youtube.com/shorts/abcdefghijk", None) is True
+
+def test_youtube_no_match_channel():
+    p = YoutubePattern()
+    assert p.matches("https://www.youtube.com/@somechannel", None) is False
+    assert p.matches("https://example.com/watch?v=abc", None) is False
+
+def test_youtube_video_id_extraction():
+    assert YoutubePattern._video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert YoutubePattern._video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert YoutubePattern._video_id("https://www.youtube.com/shorts/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert YoutubePattern._video_id("https://www.youtube.com/watch?v=") is None
+
+@pytest.mark.asyncio
+async def test_youtube_extract_joins_transcript():
+    p = YoutubePattern()
+    async def fake_title(self, url): return "Test Video"
+    with patch.object(YoutubePattern, "_get_transcript", staticmethod(lambda vid: "hello world this is a test")), \
+         patch.object(YoutubePattern, "_fetch_title", fake_title):
+        res = await p.extract("https://youtu.be/dQw4w9WgXcQ", "", None, max_tokens=2000)
+    assert res["type"] == "youtube"
+    assert res["title"] == "Test Video"
+    assert res["content"] == "hello world this is a test"
+    assert res["token_estimate"] > 0
+    assert res["truncated"] is False
+
+@pytest.mark.asyncio
+async def test_youtube_extract_no_transcript():
+    p = YoutubePattern()
+    async def fake_title(self, url): return "No Captions"
+    with patch.object(YoutubePattern, "_get_transcript", staticmethod(lambda vid: None)), \
+         patch.object(YoutubePattern, "_fetch_title", fake_title):
+        res = await p.extract("https://youtu.be/dQw4w9WgXcQ", "", None)
+    assert res["type"] == "youtube"
+    assert res["content_error"] == "no_transcript"
+    assert res["content"] == ""
+
+@pytest.mark.asyncio
+async def test_youtube_extract_bad_url():
+    p = YoutubePattern()
+    res = await p.extract("https://www.youtube.com/watch?v=", "", None)
+    assert res["type"] == "youtube"
+    assert "content_error" in res
+
+# --- PDF Pattern ---
+
+def test_pdf_matches_extension():
+    p = PdfPattern()
+    assert p.matches("https://example.com/paper.pdf", None) is True
+    assert p.matches("https://example.com/a/b/report.PDF", None) is True
+    assert p.matches("https://example.com/page.html", None) is False
+
+def test_pdf_matches_content_type():
+    p = PdfPattern()
+    assert p.matches("https://example.com/download", None, content_type="application/pdf") is True
+    assert p.matches("https://example.com/download", None, content_type="text/html") is False
+
+@pytest.mark.asyncio
+async def test_pdf_extract_from_bytes():
+    p = PdfPattern()
+    fake_page = MagicMock()
+    fake_page.extract_text.return_value = "Page one text."
+    fake_reader = MagicMock()
+    fake_reader.pages = [fake_page, fake_page]
+    fake_reader.metadata = None
+    fake_pypdf = MagicMock()
+    fake_pypdf.PdfReader.return_value = fake_reader
+    with patch.dict("sys.modules", {"pypdf": fake_pypdf}):
+        res = await p.extract("https://example.com/report.pdf", "", None,
+                              max_tokens=2000, pdf_bytes=b"%PDF-1.4 fake")
+    assert res["type"] == "pdf"
+    assert "Page one text." in res["content"]
+    assert res["title"] == "report.pdf"
+    assert res["token_estimate"] > 0
+
+@pytest.mark.asyncio
+async def test_pdf_extract_parse_error():
+    p = PdfPattern()
+    fake_pypdf = MagicMock()
+    fake_pypdf.PdfReader.side_effect = Exception("corrupt")
+    with patch.dict("sys.modules", {"pypdf": fake_pypdf}):
+        res = await p.extract("https://example.com/report.pdf", "", None, pdf_bytes=b"junk")
+    assert res["type"] == "pdf"
+    assert "content_error" in res

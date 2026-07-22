@@ -8,6 +8,8 @@ markdownify==0.13.1
 lxml==5.3.0
 python-multipart==0.0.12
 playwright==1.49.0
+youtube-transcript-api==0.6.3
+pypdf==5.1.0
 pytest==8.3.3
 pytest-asyncio==0.24.0
 pytest-cov==5.0.0
