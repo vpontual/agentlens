@@ -16,6 +16,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 import trafilatura
+
+from ssrf_guard import BlockedTarget, check_url
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, PlainTextResponse
@@ -828,6 +830,16 @@ async def _parse_url(url: str, max_tokens: int = 2000, include_links: bool = Tru
         return {"source": url, "error": "Invalid URL: missing scheme or host", "status_code": 400}
     if parsed_url.scheme not in ("http", "https"):
         return {"source": url, "error": f"Unsupported URL scheme: {parsed_url.scheme}", "status_code": 400}
+
+    # Refuse internal destinations. agentlens runs with network_mode: host and
+    # will fetch whatever it is handed, and two of its callers are LLM agent
+    # tools — a prompt injection can name the next URL. Restricting the target
+    # is the fix; authentication would not be, since the agents are legitimate
+    # callers holding valid credentials.
+    try:
+        check_url(url)
+    except BlockedTarget as exc:
+        return {"source": url, "error": f"Blocked: {exc}", "status_code": 403}
 
     # Check response cache
     cached = RESPONSE_CACHE.get(url, max_tokens, include_links, include_actions)
