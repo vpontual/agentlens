@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium
 
-COPY main.py start.sh ./
+COPY main.py ssrf_guard.py start.sh ./
 COPY static/ static/
 
 EXPOSE 7001
