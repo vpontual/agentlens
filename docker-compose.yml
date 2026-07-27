@@ -5,4 +5,10 @@ services:
     container_name: agentlens
     network_mode: host
     restart: unless-stopped
+    environment:
+      # Hostnames permitted to resolve to private addresses. VP's own
+      # domains use split-horizon DNS (agentlens.casavp.com,
+      # llm-api.casarp.us, finance.casavp.com all -> 10.x), so without
+      # this the guard refuses them.
+      - AGENTLENS_ALLOW_HOSTS=${AGENTLENS_ALLOW_HOSTS:-}
     command: uvicorn main:app --host 0.0.0.0 --port 7001
