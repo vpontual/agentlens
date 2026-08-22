@@ -708,14 +708,21 @@ def map_interactions(soup: BeautifulSoup, base_url: str) -> Dict[str, List[Dict[
         fields = [{"name": i.get("name") or i.get("id", "unnamed"), "type": i.get("type", "text") if i.name != "textarea" else "textarea", "required": bool(i.get("required")), "placeholder": i.get("placeholder")} for i in form.find_all(["input", "select", "textarea"])]
         actions.append({"type": "form", "method": (form.get("method") or "GET").upper(), "action": urljoin(base_url, form.get("action", "")), "fields": fields})
     btn_pattern = re.compile(r"btn|button|cta|primary|submit|login|signup", re.I)
-    for a in soup.find_all(["a", "button"]):
-        href, cls = a.get("href"), " ".join(a.get("class", [])) if isinstance(a.get("class"), list) else a.get("class", "")
-        is_cta = btn_pattern.search(cls) or a.name == "button"
+    for el in soup.find_all(["a", "button"]):
+        href = el.get("href") if el.name == "a" else el.get("formaction") or el.get("form")
+        cls = " ".join(el.get("class", [])) if isinstance(el.get("class"), list) else el.get("class", "")
+        is_cta = btn_pattern.search(cls) or el.name == "button"
+        if el.name == "button":
+            # Buttons have no href — capture them as actions if they have text/CTA class
+            label = el.get_text(strip=True)
+            if label and len(actions) < 25:
+                actions.append({"type": "action_button", "label": label[:80], "is_primary": bool(is_cta)})
+            continue
         if not href or href.startswith(("#", "javascript:")): continue
         resolved = urljoin(base_url, href)
-        if is_cta and len(actions) < 25: actions.append({"type": "action_link", "label": a.get_text(strip=True)[:80], "href": resolved, "is_primary": bool(is_cta)})
+        if is_cta and len(actions) < 25: actions.append({"type": "action_link", "label": el.get_text(strip=True)[:80], "href": resolved, "is_primary": bool(is_cta)})
         elif resolved not in seen_links and len(links) < 40:
-            text = a.get_text(strip=True)
+            text = el.get_text(strip=True)
             if text and len(text) > 2:
                 links.append({"text": text[:100], "href": resolved, "is_nav": urlparse(resolved).netloc == base_domain})
                 seen_links.add(resolved)
