@@ -26,9 +26,20 @@ def test_map_interactions_semantic():
     res = map_interactions(soup, "https://example.com")
 
     # Check Actions
+    #
+    # This previously asserted >= 2 action_links, counting <button href="/signup">
+    # as one. `href` is not valid on a <button> and buttons do not navigate, so the
+    # old code was manufacturing a link that does not exist. Buttons are now
+    # captured as their own action_button type with a label and no href.
     action_links = [a for a in res["actions"] if a["type"] == "action_link"]
-    assert len(action_links) >= 2
+    assert len(action_links) >= 1
     assert any(a["label"] == "Login Now" and a["is_primary"] for a in action_links)
+    assert all("href" in a for a in action_links), "an action_link must carry the href it links to"
+
+    action_buttons = [a for a in res["actions"] if a["type"] == "action_button"]
+    assert len(action_buttons) >= 1
+    assert any(a["label"] == "Sign Up" for a in action_buttons)
+    assert all("href" not in a for a in action_buttons), "a button does not navigate — it must not carry an href"
 
     # Check Links
     nav_links = [l for l in res["links"] if l.get("is_nav")]
