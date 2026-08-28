@@ -579,29 +579,36 @@ class YoutubePattern(BasePattern):
     @staticmethod
     def _transcript_via_api(video_id: str) -> Optional[str]:
         try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            from youtube_transcript_api._errors import (
+            # youtube-transcript-api 1.x. The errors moved to the public namespace
+            # (they were under the private _errors in 0.6.x), and the API became
+            # instance-based: YouTubeTranscriptApi().list(...) instead of the old
+            # YouTubeTranscriptApi.list_transcripts(...) classmethod.
+            from youtube_transcript_api import (
+                YouTubeTranscriptApi,
                 TranscriptsDisabled, NoTranscriptFound, VideoUnavailable,
             )
         except Exception as e:  # pragma: no cover - dep guarded
             logger.warning(f"youtube-transcript-api unavailable: {e}")
             return None
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi().list(video_id)
             entries = None
             for finder in (
                 lambda: transcript_list.find_manually_created_transcript(["en", "en-US", "en-GB"]),
                 lambda: transcript_list.find_generated_transcript(["en", "en-US", "en-GB"]),
             ):
                 try:
-                    entries = finder().fetch()
+                    # 1.x fetch() returns a FetchedTranscript of objects, not a
+                    # list of dicts. to_raw_data() restores the dict shape the
+                    # joining below expects.
+                    entries = finder().fetch().to_raw_data()
                     break
                 except NoTranscriptFound:
                     continue
             if entries is None:
                 for t in transcript_list:
                     try:
-                        entries = t.fetch()
+                        entries = t.fetch().to_raw_data()
                         break
                     except Exception:
                         continue
