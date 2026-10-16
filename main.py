@@ -175,11 +175,11 @@ class SERPPattern(BasePattern):
         if "google.com" in domain:
             for g in soup.select(".g, .tF2Cxc"):
                 link, title, snippet = g.select_one("a[href]"), g.select_one("h3"), g.select_one(".VwiC3b, .st")
-                if link and title: results.append(SearchResult(title=title.get_text(strip=True), url=link["href"], snippet=snippet.get_text(strip=True) if snippet else None).dict())
+                if link and title: results.append(SearchResult(title=title.get_text(strip=True), url=link["href"], snippet=snippet.get_text(strip=True) if snippet else None).model_dump())
         elif "bing.com" in domain:
             for b in soup.select(".b_algo"):
                 title_link, snippet = b.select_one("h2 a"), b.select_one(".b_caption, .b_snippet")
-                if title_link: results.append(SearchResult(title=title_link.get_text(strip=True), url=title_link["href"], snippet=snippet.get_text(strip=True) if snippet else None).dict())
+                if title_link: results.append(SearchResult(title=title_link.get_text(strip=True), url=title_link["href"], snippet=snippet.get_text(strip=True) if snippet else None).model_dump())
         return {"type": "serp", "title": f"Search Results: {domain}", "results": results[:15]}
 
 class ECommercePattern(BasePattern):
@@ -373,9 +373,11 @@ class SearchPattern(BasePattern):
         form = soup.find("form", role="search") or soup.find("form", action=re.compile(r"search|query", re.I))
         if not form: return {}
         action, method = form.get("action", "/search"), (form.get("method") or "GET").upper()
-        q_in = form.find("input", type=re.compile(r"text|search", re.I)) or form.find("input", name=re.compile(r"q|s|query|search", re.I))
+        q_in = form.find("input", type=re.compile(r"text|search", re.I)) or form.find("input", attrs={"name": re.compile(r"q|s|query|search", re.I)})
         if q_in and q_in.get("name"):
-            return {"type": "search_config", "search_template": f"{urljoin(url, action)}?{q_in['name']}={{query}}" if method == "GET" else None}
+            if method != "GET":
+                return {}
+            return {"type": "search_config", "search_template": f"{urljoin(url, action)}?{q_in['name']}={{query}}"}
         return {}
 
 class ThreadPattern(BasePattern):
@@ -400,7 +402,7 @@ class ThreadPattern(BasePattern):
     async def extract(self, url: str, html: str, soup: BeautifulSoup) -> Dict[str, Any]:
         res = trafilatura.bare_extraction(html, include_comments=True)
         if not res or not res.get("comments"): return {}
-        msgs = [Message(id=i+1, author=c.get("author", "anon"), text=c.get("text", "").strip()).dict() for i, c in enumerate(res.get("comments", [])[:25])]
+        msgs = [Message(id=i+1, author=c.get("author", "anon"), text=c.get("text", "").strip()).model_dump() for i, c in enumerate(res.get("comments", [])[:25])]
         return {"type": "thread", "title": res.get("title", "Thread"), "content": res.get("text", ""), "messages": msgs, "total_count": len(res.get("comments", []))}
 
 class DocumentationPattern(BasePattern):
@@ -435,12 +437,12 @@ class DocumentationPattern(BasePattern):
         main_content = soup.find(["main", "article"]) or soup.body or soup
         for el in main_content.find_all(["h1", "h2", "h3", "p", "ul", "ol", "pre", "table"]):
             if el.name in ["h1", "h2", "h3"]:
-                if current_buffer: sections.append(Section(title=current_title, level=current_level, content="\n".join(current_buffer)).dict())
+                if current_buffer: sections.append(Section(title=current_title, level=current_level, content="\n".join(current_buffer)).model_dump())
                 current_title, current_level, current_buffer = el.get_text(strip=True), int(el.name[1]), []
             else:
                 md_text = md(str(el)).strip()
                 if md_text: current_buffer.append(md_text)
-        if current_buffer: sections.append(Section(title=current_title, level=current_level, content="\n".join(current_buffer)).dict())
+        if current_buffer: sections.append(Section(title=current_title, level=current_level, content="\n".join(current_buffer)).model_dump())
         total_sections = len(sections)
         truncated = total_sections > 50
         title = soup.title.string.strip() if soup.title and soup.title.string else "Docs"

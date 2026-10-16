@@ -221,6 +221,26 @@ def test_search_match_main_content():
     soup = BeautifulSoup(html, "lxml")
     assert p.matches("https://site.com/", soup) is True
 
+
+@pytest.mark.asyncio
+async def test_search_post_form_returns_empty():
+    """POST search forms should return {} since no query template can be built."""
+    p = SearchPattern()
+    html = """
+    <html><body>
+        <main>
+            <form role="search" action="/find" method="POST">
+                <input name="q">
+            </form>
+        </main>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "lxml")
+    assert p.matches("https://site.com/", soup) is True
+    res = await p.extract("https://site.com/", html, soup)
+    assert res == {}
+
+
 # --- Thread Pattern ---
 
 def test_thread_pattern_known_domains():
