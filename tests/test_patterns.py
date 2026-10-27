@@ -241,6 +241,46 @@ async def test_search_post_form_returns_empty():
     assert res == {}
 
 
+@pytest.mark.asyncio
+async def test_search_post_form_with_text_input_returns_empty():
+    """The case that matters: a POST form whose input has type="text". It used to come
+    back as a search_config with search_template None, which is truthy and stopped the
+    registry from trying the next pattern."""
+    p = SearchPattern()
+    html = """
+    <html><body>
+        <main>
+            <form role="search" action="/find" method="POST">
+                <input type="text" name="q">
+            </form>
+        </main>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "lxml")
+    assert p.matches("https://site.com/", soup) is True
+    res = await p.extract("https://site.com/", html, soup)
+    assert res == {}
+
+
+@pytest.mark.asyncio
+async def test_search_get_form_without_input_type_builds_template():
+    """A GET search form whose input has no type attribute used to raise TypeError
+    (find() got multiple values for argument 'name') instead of returning a template."""
+    p = SearchPattern()
+    html = """
+    <html><body>
+        <main>
+            <form role="search" action="/find" method="GET">
+                <input name="q">
+            </form>
+        </main>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "lxml")
+    res = await p.extract("https://site.com/", html, soup)
+    assert res == {"type": "search_config", "search_template": "https://site.com/find?q={query}"}
+
+
 # --- Thread Pattern ---
 
 def test_thread_pattern_known_domains():
