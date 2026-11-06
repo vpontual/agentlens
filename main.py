@@ -892,7 +892,7 @@ async def _parse_url(url: str, max_tokens: int = 2000, include_links: bool = Tru
         t0 = time.time()
         try:
             resp = await client.get(url)
-            html, status_code, headers_dict = resp.text, resp.status_code, dict(resp.headers)
+            html, status_code, headers_dict = resp.text, resp.status_code, {k.lower(): v for k, v in resp.headers.items()}
         except Exception as e: return {"source": url, "error": f"Fetch failed: {e}", "status_code": 502}
         fetch_ms = int((time.time() - t0) * 1000)
 

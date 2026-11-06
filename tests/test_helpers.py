@@ -1,7 +1,8 @@
 import pytest
-from unittest.mock import patch
+import httpx
+from unittest.mock import patch, AsyncMock
 from bs4 import BeautifulSoup
-from main import map_interactions, detect_js_wall, estimate_tokens, detect_walls, process_html_generic
+from main import map_interactions, detect_js_wall, estimate_tokens, detect_walls, process_html_generic, _parse_url, app
 
 def test_map_interactions_semantic():
     html = """
@@ -130,3 +131,58 @@ def test_trafilatura_quality_gate_passes_good_extraction():
 
     assert result["content"] == good_text
     assert result["title"] == "Good Title"
+
+
+def test_headers_normalized_to_lowercase():
+    """httpx preserves original header casing; downstream code uses lowercase keys.
+    Headers must be normalized so lookups like 'content-type' and 'server' work."""
+    from main import detect_walls
+
+    # Simulate what httpx returns: headers with original casing
+    raw_headers = {"Server": "cloudflare", "Content-Type": "text/html"}
+    normalized = {k.lower(): v for k, v in raw_headers.items()}
+
+    # Without normalization, lowercase lookup fails
+    assert "server" not in raw_headers  # key is "Server", not "server"
+    assert raw_headers.get("server") is None  # would miss Cloudflare detection
+
+    # After normalization, lowercase lookup succeeds
+    assert "server" in normalized
+    assert detect_walls("", 403, normalized) == "anti_scraping_challenge"
+
+
+@pytest.mark.asyncio
+async def test_headers_normalized_in_code_path():
+    """Regression: headers from httpx must be normalized before detect_walls.
+
+    Without normalization, lowercase lookups like 'server' fail on headers
+    with original casing (e.g., "Server"), causing Cloudflare detection to miss.
+    This test exercises the real code path by patching the HTTP client.
+    """
+    class MockHeaders:
+        def __init__(self):
+            self._headers = {"Server": "cloudflare", "Content-Type": "text/html"}
+
+        def items(self):
+            return list(self._headers.items())
+
+    class MockResponse:
+        text = "<html><body><p>Test content</p></body></html>"
+        status_code = 200
+        headers = MockHeaders()
+
+    app.state.client = httpx.AsyncClient()
+    try:
+        with patch("main.detect_walls", return_value=None) as mock_detect:
+            with patch.object(app.state.client, "get", new_callable=AsyncMock,
+                              return_value=MockResponse()):
+                await _parse_url("https://example.com/page")
+
+                # Verify detect_walls was called with normalized (lowercase-keyed) headers.
+                # This is the assertion that fails when the fix is reverted:
+                # without normalization, headers_arg.get("server") returns None.
+                headers_arg = mock_detect.call_args[0][2]
+                assert headers_arg.get("server") == "cloudflare", \
+                    f"headers must be normalized to lowercase; got {headers_arg}"
+    finally:
+        await app.state.client.aclose()
